@@ -1,0 +1,75 @@
+graph LR
+    subgraph "PUBLIC INTERNET"
+        USER["Users"]
+    end
+
+    subgraph "AWS PERIMETER"
+        WAF["AWS WAF<br/>Block malicious<br/>traffic"]
+        CDN["CloudFront CDN<br/>Static content<br/>DDoS mitigation"]
+    end
+
+    subgraph "AWS VPC - PRIVATE SUBNETS"
+        APIGW["API Gateway<br/>Endpoint"]
+        
+        subgraph "PUBLIC SUBNET"
+            NATGW["NAT Gateway<br/>Outbound only"]
+        end
+
+        subgraph "PRIVATE SUBNET - APP"
+            LAMBDA["Lambda Functions<br/>TLS 1.3 communication<br/>Zero external IPs"]
+            ECS["ECS Containers<br/>VPC Endpoints<br/>No internet access"]
+        end
+
+        subgraph "PRIVATE SUBNET - DB"
+            RDS2["RDS Instance<br/>Encrypted connections<br/>No public endpoint"]
+            DYNAMO["DynamoDB<br/>VPC Endpoint<br/>Private access"]
+            VECTOR["Vector DB<br/>VPC Endpoint<br/>Encrypted"]
+        end
+    end
+
+    subgraph "ENCRYPTION & KEYS"
+        KMS2["KMS<br/>Encrypt at rest<br/>Rotate keys 90d"]
+        SECRETS2["Secrets Manager<br/>Encrypt secrets<br/>Rotate 90d"]
+    end
+
+    subgraph "MONITORING & AUDIT"
+        CLOUDTRAIL2["CloudTrail<br/>Log all API calls<br/>7 year retention"]
+        GUARDDUTY2["GuardDuty<br/>Anomaly detection<br/>Threat intelligence"]
+    end
+
+    USER -->|HTTPS| WAF
+    WAF --> CDN
+    CDN --> APIGW
+    
+    APIGW -->|Private| LAMBDA
+    APIGW -->|Private| ECS
+    
+    LAMBDA -->|TLS| RDS2
+    LAMBDA -->|TLS| DYNAMO
+    LAMBDA -->|TLS| VECTOR
+    LAMBDA -->|Assume IAM Role| KMS2
+    LAMBDA -->|Fetch Secrets| SECRETS2
+    
+    ECS -->|TLS| RDS2
+    ECS -->|TLS| DYNAMO
+    ECS -->|IAM| KMS2
+    
+    RDS2 -->|Encrypted| KMS2
+    DYNAMO -->|Encrypted| KMS2
+    VECTOR -->|Encrypted| KMS2
+    
+    APIGW -.->|Audit| CLOUDTRAIL2
+    LAMBDA -.->|Audit| CLOUDTRAIL2
+    GUARDDUTY2 -.->|Monitor| KMS2
+
+    style WAF fill:#ffebee
+    style CDN fill:#ffebee
+    style KMS2 fill:#ffebee
+    style SECRETS2 fill:#ffebee
+    style CLOUDTRAIL2 fill:#ffebee
+    style GUARDDUTY2 fill:#ffebee
+    style LAMBDA fill:#c8e6c9
+    style ECS fill:#c8e6c9
+    style RDS2 fill:#ffe0b2
+    style DYNAMO fill:#ffe0b2
+    style VECTOR fill:#ffe0b2

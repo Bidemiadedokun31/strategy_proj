@@ -1,0 +1,202 @@
+graph TB
+    subgraph "CLIENT LAYER"
+        WEB["Web Frontend<br/>(React/Vue)<br/>Real-time UI"]
+        MOBILE["Mobile App<br/>(Optional)"]
+    end
+
+    subgraph "SECURITY & GATEWAY"
+        WAF["AWS WAF<br/>DDoS Protection"]
+        APIGW["API Gateway<br/>Rate Limiting<br/>Authentication<br/>Request Validation"]
+        AUTHSVC["Auth Service<br/>(Cognito + Custom)<br/>RBAC Enforcement"]
+    end
+
+    subgraph "BACKEND MICROSERVICES"
+        SUMMARYSVC["Summarization Service<br/>(Lambda/ECS)<br/>- Call Processing<br/>- Transcript Ingestion<br/>- Multi-tier Summaries"]
+        RESOLUTIONSVC["Resolution Service<br/>(Lambda/ECS)<br/>- Recommendation Engine<br/>- RAG Orchestration<br/>- Precedent Lookup"]
+        COMPLAINTAPI["Complaint Management API<br/>(Lambda/ECS)<br/>- CRUD Operations<br/>- Status Tracking<br/>- Data Aggregation"]
+        AUDITAPI["Audit & Compliance API<br/>(Lambda/ECS)<br/>- Logging<br/>- Access Control<br/>- Compliance Reports"]
+    end
+
+    subgraph "AI AGENTS & ORCHESTRATION"
+        AIORCHESTRATOR["Multi-Agent Orchestrator<br/>(Lambda Step Functions)<br/>- Agent Routing<br/>- Prompt Management<br/>- Quality Control"]
+        SUMMARYAGENT["Summarization Agent<br/>(Bedrock Claude)<br/>- NLP Processing<br/>- Multi-language Support<br/>- Hallucination Detection"]
+        RESAGENT["Resolution Agent<br/>(Bedrock Claude)<br/>- RAG Integration<br/>- Confidence Scoring<br/>- Source Citation"]
+    end
+
+    subgraph "DATA & VECTOR LAYER"
+        DYNAMODB["DynamoDB<br/>- Complaints Table<br/>- Summaries Cache<br/>- Recommendations Log<br/>- TTL Policies"]
+        RDS["RDS PostgreSQL<br/>- Audit Logs<br/>- User Data<br/>- Compliance Records<br/>- Historical Analytics"]
+        S3RECORDINGS["S3 Bucket<br/>- Call Recordings<br/>- Transcripts<br/>- Backup Storage<br/>Default Encryption"]
+        VECTORDB["OpenSearch Vector DB<br/>- Historical Cases Index<br/>- Embeddings Storage<br/>- Semantic Search<br/>- HNSW Index"]
+        CACHE["ElastiCache Redis<br/>- API Response Cache<br/>- Session Store<br/>- Embedding Cache<br/>- 15-min TTL"]
+    end
+
+    subgraph "AI/ML INFRASTRUCTURE"
+        BEDROCK["AWS Bedrock<br/>- Claude 3 Models<br/>- Token Budgeting<br/>- Rate Limiting"]
+        EMBEDDINGS["SageMaker Endpoint<br/>- Embedding Model<br/>- Auto-scaling<br/>- Multi-GPU"]
+        FEATURE["SageMaker Feature Store<br/>- Historical Case Features<br/>- Metadata Enrichment"]
+    end
+
+    subgraph "ASYNC PROCESSING & EVENTS"
+        SQS["SQS Queues<br/>- Summarization Jobs<br/>- RAG Indexing<br/>- Batch Processing<br/>DLQ for Failures"]
+        SNS["SNS Topics<br/>- Complaint Created<br/>- Resolution Ready<br/>- Error Notifications<br/>- Audit Events"]
+        KINESIS["Kinesis Data Stream<br/>- Real-time Events<br/>- Compliance Stream<br/>- Analytics Feed"]
+        WORKERS["Lambda Workers<br/>- Async Job Processor<br/>- Batch Summarizer<br/>- Vector Indexer<br/>- Report Generator"]
+    end
+
+    subgraph "MONITORING & OBSERVABILITY"
+        CLOUDWATCH["CloudWatch<br/>- Logs (7-year retention)<br/>- Metrics & Dashboards<br/>- Alarms & Thresholds"]
+        XRAY["X-Ray<br/>- Distributed Tracing<br/>- Service Map<br/>- Latency Analysis"]
+        CLOUDTRAIL["CloudTrail<br/>- API Audit Log<br/>- User Activity<br/>- Resource Changes"]
+        GUARDDUTY["GuardDuty<br/>- Threat Detection<br/>- Anomaly Analysis<br/>- Security Insights"]
+    end
+
+    subgraph "SECURITY & COMPLIANCE"
+        KMS["KMS<br/>- Master Keys<br/>- Encryption at Rest<br/>- Key Rotation"]
+        SECRETS["Secrets Manager<br/>- API Keys<br/>- DB Credentials<br/>- Model Tokens"]
+        VPC["VPC<br/>- Private Subnets<br/>- Security Groups<br/>- NACLs<br/>- Bastion Host"]
+        WAF2["Config Rules<br/>- Compliance Monitoring<br/>- Auto Remediation"]
+    end
+
+    subgraph "DATA PIPELINE & ANALYTICS"
+        GLUE["Glue Crawler<br/>- Data Cataloging<br/>- Schema Detection"]
+        ATHENA["Athena<br/>- Ad-hoc SQL Queries<br/>- Data Lake Analysis"]
+        QUICKSIGHT["QuickSight<br/>- Executive Dashboard<br/>- Real-time Charts<br/>- Drill-down Reports"]
+        REDSHIFT["Redshift (Optional)<br/>- Historical Analytics<br/>- BI Integration"]
+    end
+
+    %% CLIENT to GATEWAY
+    WEB --> WAF
+    MOBILE --> WAF
+    WAF --> APIGW
+
+    %% GATEWAY to AUTH
+    APIGW --> AUTHSVC
+
+    %% AUTH & GATEWAY to SERVICES
+    AUTHSVC --> SUMMARYSVC
+    AUTHSVC --> RESOLUTIONSVC
+    AUTHSVC --> COMPLAINTAPI
+    AUTHSVC --> AUDITAPI
+
+    %% SERVICES to ORCHESTRATOR
+    SUMMARYSVC --> AIORCHESTRATOR
+    RESOLUTIONSVC --> AIORCHESTRATOR
+
+    %% ORCHESTRATOR to AGENTS
+    AIORCHESTRATOR --> SUMMARYAGENT
+    AIORCHESTRATOR --> RESAGENT
+
+    %% AGENTS to AI INFRASTRUCTURE
+    SUMMARYAGENT --> BEDROCK
+    RESAGENT --> BEDROCK
+    RESAGENT --> EMBEDDINGS
+    RESAGENT --> VECTORDB
+
+    %% SERVICES to DATA LAYER
+    COMPLAINTAPI --> DYNAMODB
+    COMPLAINTAPI --> RDS
+    SUMMARYSVC --> S3RECORDINGS
+    RESOLUTIONSVC --> VECTORDB
+    COMPLAINTAPI --> CACHE
+    AUDITAPI --> RDS
+
+    %% AGENTS to DATA
+    SUMMARYAGENT --> DYNAMODB
+    RESAGENT --> DYNAMODB
+    RESAGENT --> FEATURE
+
+    %% SERVICES to ASYNC
+    SUMMARYSVC --> SQS
+    RESOLUTIONSVC --> SQS
+    COMPLAINTAPI --> SNS
+    AUDITAPI --> SNS
+    AIORCHESTRATOR --> KINESIS
+
+    %% ASYNC PROCESSING
+    SQS --> WORKERS
+    SNS --> WORKERS
+    WORKERS --> DYNAMODB
+    WORKERS --> VECTORDB
+    WORKERS --> S3RECORDINGS
+
+    %% KINESIS to ANALYTICS
+    KINESIS --> ATHENA
+    KINESIS --> QUICKSIGHT
+
+    %% DATA PIPELINE
+    DYNAMODB --> GLUE
+    RDS --> GLUE
+    S3RECORDINGS --> GLUE
+    GLUE --> ATHENA
+    ATHENA --> QUICKSIGHT
+    ATHENA --> REDSHIFT
+
+    %% MONITORING
+    SUMMARYSVC -.->|Logs| CLOUDWATCH
+    RESOLUTIONSVC -.->|Logs| CLOUDWATCH
+    COMPLAINTAPI -.->|Logs| CLOUDWATCH
+    AUDITAPI -.->|Logs| CLOUDWATCH
+    WORKERS -.->|Logs| CLOUDWATCH
+    AIORCHESTRATOR -.->|Logs| CLOUDWATCH
+
+    SUMMARYSVC -.->|Traces| XRAY
+    RESOLUTIONSVC -.->|Traces| XRAY
+    AIORCHESTRATOR -.->|Traces| XRAY
+
+    APIGW -.->|API Calls| CLOUDTRAIL
+    AUTHSVC -.->|Auth Events| CLOUDTRAIL
+    BEDROCK -.->|Token Usage| CLOUDWATCH
+
+    DYNAMODB -.->|Security| GUARDDUTY
+    RDS -.->|Security| GUARDDUTY
+    VECTORDB -.->|Security| GUARDDUTY
+
+    %% SECURITY
+    DYNAMODB --> KMS
+    RDS --> KMS
+    S3RECORDINGS --> KMS
+    VECTORDB --> KMS
+    
+    SUMMARYSVC --> SECRETS
+    RESOLUTIONSVC --> SECRETS
+    COMPLAINTAPI --> SECRETS
+    
+    APIGW --> VPC
+    SUMMARYSVC --> VPC
+    RESOLUTIONSVC --> VPC
+    COMPLAINTAPI --> VPC
+    WORKERS --> VPC
+
+    DYNAMODB --> WAF2
+    RDS --> WAF2
+    S3RECORDINGS --> WAF2
+
+    %% COMPLIANCE
+    AUDITAPI -.->|Audit Trail| CLOUDTRAIL
+    AIORCHESTRATOR -.->|Decision Log| RDS
+
+    style WEB fill:#e1f5ff
+    style MOBILE fill:#e1f5ff
+    style WAF fill:#fff3e0
+    style APIGW fill:#fff3e0
+    style AUTHSVC fill:#fff3e0
+    style SUMMARYSVC fill:#c8e6c9
+    style RESOLUTIONSVC fill:#c8e6c9
+    style COMPLAINTAPI fill:#c8e6c9
+    style AUDITAPI fill:#c8e6c9
+    style AIORCHESTRATOR fill:#f3e5f5
+    style SUMMARYAGENT fill:#f3e5f5
+    style RESAGENT fill:#f3e5f5
+    style DYNAMODB fill:#ffe0b2
+    style RDS fill:#ffe0b2
+    style S3RECORDINGS fill:#ffe0b2
+    style VECTORDB fill:#ffe0b2
+    style CACHE fill:#ffe0b2
+    style BEDROCK fill:#c5cae9
+    style EMBEDDINGS fill:#c5cae9
+    style FEATURE fill:#c5cae9
+    style SQS fill:#ffccbc
+    style SNS fill:#ffccbc
+    style KINESIS fill:#ffccbc
+    style WORKERS fill:#ffccbc

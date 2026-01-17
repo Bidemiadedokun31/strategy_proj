@@ -1,0 +1,32 @@
+graph LR
+    DEV["Developer<br/>Push to repo"]
+    GIT["GitHub/CodeCommit<br/>Source control"]
+    CI["CodePipeline<br/>Trigger on push"]
+    BUILD["CodeBuild<br/>Compile, test<br/>Unit + Integration"]
+    SCAN["Security Scan<br/>SAST, Secrets<br/>Dependency check"]
+    DEPLOY_TEST["Deploy to Staging<br/>CloudFormation/CDK"]
+    TEST_STAGE["Smoke Tests<br/>Performance Tests<br/>Security Tests"]
+    APPROVAL["Manual Approval<br/>Security review<br/>Architecture review"]
+    DEPLOY_PROD["Deploy to Production<br/>Blue/Green<br/>Canary rollout"]
+    MONITOR["Monitoring<br/>Dashboards<br/>Alerts<br/>Rollback ready"]
+
+    DEV --> GIT
+    GIT --> CI
+    CI --> BUILD
+    BUILD --> SCAN
+    SCAN --> DEPLOY_TEST
+    DEPLOY_TEST --> TEST_STAGE
+    TEST_STAGE --> APPROVAL
+    APPROVAL --> DEPLOY_PROD
+    DEPLOY_PROD --> MONITOR
+
+    style DEV fill:#bbdefb
+    style GIT fill:#bbdefb
+    style CI fill:#c8e6c9
+    style BUILD fill:#c8e6c9
+    style SCAN fill:#ffccbc
+    style DEPLOY_TEST fill:#f8bbd0
+    style TEST_STAGE fill:#f8bbd0
+    style APPROVAL fill:#fff9c4
+    style DEPLOY_PROD fill:#c8e6c9
+    style MONITOR fill:#b2dfdb
