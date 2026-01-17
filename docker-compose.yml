@@ -1,0 +1,152 @@
+version: '3.8'
+
+services:
+  # LocalStack for AWS emulation (development only)
+  localstack:
+    image: localstack/localstack:latest
+    ports:
+      - "4566:4566"
+    environment:
+      SERVICES: dynamodb,s3,sqs,sns,kms,lambda
+      DEBUG: 1
+      DATA_DIR: /tmp/localstack/data
+      DOCKER_HOST: unix:///var/run/docker.sock
+    volumes:
+      - "${TMPDIR:-.}:/tmp/localstack"
+      - "/var/run/docker.sock:/var/run/docker.sock"
+
+  # PostgreSQL for audit logs
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: smartresolve
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-smartresolve}
+      POSTGRES_DB: smartresolve
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U smartresolve"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis for caching
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # OpenSearch for vector search
+  opensearch:
+    image: opensearchproject/opensearch:2.10.0
+    environment:
+      - cluster.name=opensearch-cluster
+      - node.name=opensearch-node1
+      - discovery.seed_hosts=opensearch
+      - cluster.initial_master_nodes=opensearch-node1
+      - OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m
+      - OPENSEARCH_INITIAL_ADMIN_PASSWORD=SmartResolve@123
+    ports:
+      - "9200:9200"
+      - "9600:9600"
+    volumes:
+      - opensearch_data:/usr/share/opensearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:9200 >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Backend Summarization Service
+  summarization-service:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/Dockerfile.backend
+    ports:
+      - "3001:3000"
+    environment:
+      NODE_ENV: development
+      AWS_REGION: us-east-1
+      DYNAMODB_ENDPOINT: http://localstack:4566
+      SUMMARIZATION_TABLE: smartresolve-summaries-dev
+      BEDROCK_REGION: us-west-2
+    depends_on:
+      localstack:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./backend/services/summarization-service:/app/src
+      - /app/node_modules
+
+  # Backend Resolution Service
+  resolution-service:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/Dockerfile.backend
+    ports:
+      - "3002:3000"
+    environment:
+      NODE_ENV: development
+      AWS_REGION: us-east-1
+      DYNAMODB_ENDPOINT: http://localstack:4566
+      OPENSEARCH_ENDPOINT: opensearch:9200
+      OPENSEARCH_USER: admin
+      OPENSEARCH_PASSWORD: SmartResolve@123
+    depends_on:
+      opensearch:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend/services/resolution-service:/app/src
+      - /app/node_modules
+
+  # Frontend
+  frontend:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/Dockerfile.frontend
+    ports:
+      - "3000:3000"
+    environment:
+      VITE_API_URL: http://localhost:3001
+    volumes:
+      - ./frontend/src:/app/src
+      - /app/node_modules
+    depends_on:
+      - summarization-service
+      - resolution-service
+
+  # Nginx reverse proxy
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./infrastructure/docker/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./infrastructure/docker/certs:/etc/nginx/certs:ro
+    depends_on:
+      - frontend
+      - summarization-service
+      - resolution-service
+
+volumes:
+  postgres_data:
+  redis_data:
+  opensearch_data:
+
+networks:
+  default:
+    name: smartresolve-network

@@ -1,0 +1,15 @@
+{
+  "name": "rag-orchestrator",
+  "version": "1.0.0",
+  "description": "RAG pipeline orchestrator for resolution recommendations",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "python src/orchestrator.py",
+    "build": "echo 'Python project - no build needed'",
+    "start": "python src/orchestrator.py",
+    "test": "pytest tests/",
+    "test:watch": "pytest tests/ -v --tb=short",
+    "lint": "pylint src/"
+  },
+  "dependencies": {}
+}

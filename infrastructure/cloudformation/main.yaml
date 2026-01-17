@@ -1,0 +1,285 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'SmartResolve - Enterprise AI Complaint Intelligence Platform Infrastructure'
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues: [dev, staging, prod]
+    Description: Deployment environment
+
+  VpcCIDR:
+    Type: String
+    Default: 10.0.0.0/16
+    Description: VPC CIDR block
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: "Environment Configuration"
+        Parameters:
+          - Environment
+          - VpcCIDR
+
+Resources:
+  # VPC & Networking
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCIDR
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags:
+        - Key: Name
+          Value: !Sub smartresolve-vpc-${Environment}
+
+  # DynamoDB Table for Summaries
+  SummariesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub smartresolve-summaries-${Environment}
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+        - AttributeName: complaintId
+          AttributeType: S
+        - AttributeName: createdAt
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: complaintId-createdAt-index
+          KeySchema:
+            - AttributeName: complaintId
+              KeyType: HASH
+            - AttributeName: createdAt
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
+      TTL:
+        AttributeName: ttl
+        Enabled: true
+      Tags:
+        - Key: Name
+          Value: smartresolve-summaries
+        - Key: Environment
+          Value: !Ref Environment
+
+  # DynamoDB Table for Complaints
+  ComplaintsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub smartresolve-complaints-${Environment}
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+        - AttributeName: customerId
+          AttributeType: S
+        - AttributeName: createdAt
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: customerId-createdAt-index
+          KeySchema:
+            - AttributeName: customerId
+              KeyType: HASH
+            - AttributeName: createdAt
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
+      Tags:
+        - Key: Name
+          Value: smartresolve-complaints
+        - Key: Environment
+          Value: !Ref Environment
+
+  # S3 Bucket for Recordings & Backups
+  StorageBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub smartresolve-storage-${AWS::AccountId}-${Environment}
+      VersioningConfiguration:
+        Status: Enabled
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: TransitionToIA
+            Status: Enabled
+            Transitions:
+              - StorageClass: STANDARD_IA
+                TransitionInDays: 30
+              - StorageClass: GLACIER
+                TransitionInDays: 90
+      Tags:
+        - Key: Name
+          Value: smartresolve-storage
+        - Key: Environment
+          Value: !Ref Environment
+
+  # SQS Queue for Async Jobs
+  SummarizationQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub smartresolve-summarization-${Environment}
+      VisibilityTimeout: 300
+      MessageRetentionPeriod: 1209600
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt SummarizationDLQ.Arn
+        maxReceiveCount: 3
+      Tags:
+        - Key: Name
+          Value: smartresolve-summarization-queue
+        - Key: Environment
+          Value: !Ref Environment
+
+  SummarizationDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub smartresolve-summarization-dlq-${Environment}
+      MessageRetentionPeriod: 1209600
+      Tags:
+        - Key: Name
+          Value: smartresolve-summarization-dlq
+        - Key: Environment
+          Value: !Ref Environment
+
+  # SNS Topics for Events
+  ComplaintCreatedTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub smartresolve-complaint-created-${Environment}
+      DisplayName: Complaint Created Events
+      Tags:
+        - Key: Name
+          Value: smartresolve-complaint-created
+        - Key: Environment
+          Value: !Ref Environment
+
+  ResolutionReadyTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub smartresolve-resolution-ready-${Environment}
+      DisplayName: Resolution Ready Events
+      Tags:
+        - Key: Name
+          Value: smartresolve-resolution-ready
+        - Key: Environment
+          Value: !Ref Environment
+
+  # KMS Key for Encryption
+  KMSKey:
+    Type: AWS::KMS::Key
+    Properties:
+      Description: SmartResolve Master Encryption Key
+      KeyPolicy:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: Enable IAM User Permissions
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:aws:iam::${AWS::AccountId}:root'
+            Action: 'kms:*'
+            Resource: '*'
+          - Sid: Allow Services
+            Effect: Allow
+            Principal:
+              Service:
+                - dynamodb.amazonaws.com
+                - s3.amazonaws.com
+                - rds.amazonaws.com
+            Action:
+              - 'kms:Decrypt'
+              - 'kms:GenerateDataKey'
+              - 'kms:DescribeKey'
+            Resource: '*'
+
+  KMSKeyAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: !Sub alias/smartresolve-${Environment}
+      TargetKeyId: !Ref KMSKey
+
+  # CloudWatch Log Group
+  ApplicationLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /smartresolve/${Environment}/application
+      RetentionInDays: 30
+
+  # CloudTrail for Audit
+  AuditTrail:
+    Type: AWS::CloudTrail::Trail
+    Properties:
+      S3BucketName: !Ref StorageBucket
+      IsLogging: true
+      IsMultiRegionTrail: false
+      IncludeGlobalServiceEvents: false
+      TrailName: !Sub smartresolve-audit-${Environment}
+      EnableLogFileValidation: true
+      Tags:
+        - Key: Name
+          Value: smartresolve-audit
+        - Key: Environment
+          Value: !Ref Environment
+    DependsOn: StorageBucket
+
+Outputs:
+  VPCId:
+    Description: VPC ID
+    Value: !Ref VPC
+    Export:
+      Name: !Sub smartresolve-vpc-${Environment}
+
+  SummariesTableName:
+    Description: Summaries DynamoDB Table
+    Value: !Ref SummariesTable
+    Export:
+      Name: !Sub smartresolve-summaries-table-${Environment}
+
+  ComplaintsTableName:
+    Description: Complaints DynamoDB Table
+    Value: !Ref ComplaintsTable
+    Export:
+      Name: !Sub smartresolve-complaints-table-${Environment}
+
+  StorageBucketName:
+    Description: S3 Storage Bucket
+    Value: !Ref StorageBucket
+    Export:
+      Name: !Sub smartresolve-storage-bucket-${Environment}
+
+  SummarizationQueueUrl:
+    Description: SQS Queue URL
+    Value: !Ref SummarizationQueue
+    Export:
+      Name: !Sub smartresolve-summarization-queue-${Environment}
+
+  KMSKeyId:
+    Description: KMS Master Key ID
+    Value: !GetAtt KMSKey.Arn
+    Export:
+      Name: !Sub smartresolve-kms-key-${Environment}
+
+  ComplaintCreatedTopicArn:
+    Description: Complaint Created SNS Topic
+    Value: !Ref ComplaintCreatedTopic
+    Export:
+      Name: !Sub smartresolve-complaint-created-topic-${Environment}

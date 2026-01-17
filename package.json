@@ -1,0 +1,56 @@
+{
+  "name": "smartresolve",
+  "version": "1.0.0",
+  "description": "Enterprise AI-powered customer complaint intelligence platform with multi-agent orchestration",
+  "author": "SmartResolve Team",
+  "license": "MIT",
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Bidemiadedokun31/strategy_proj.git"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  },
+  "workspaces": [
+    "backend/*",
+    "backend/shared",
+    "frontend",
+    "ai-agents/*",
+    "infrastructure"
+  ],
+  "scripts": {
+    "install:all": "npm install && npm install -w backend/services/summarization-service && npm install -w backend/services/resolution-service && npm install -w backend/services/complaint-api && npm install -w backend/services/audit-api && npm install -w frontend && npm install -w ai-agents/summarization-agent && npm install -w ai-agents/resolution-agent",
+    "dev": "concurrently \"npm run dev -w backend/services/summarization-service\" \"npm run dev -w backend/services/resolution-service\" \"npm run dev -w frontend\"",
+    "build": "npm run build -w backend/services/summarization-service && npm run build -w backend/services/resolution-service && npm run build -w backend/services/complaint-api && npm run build -w backend/services/audit-api && npm run build -w frontend",
+    "test": "npm test -w backend/services/summarization-service && npm test -w backend/services/resolution-service && npm test -w frontend",
+    "lint": "eslint . --ext .ts,.tsx,.js,.jsx",
+    "docker:build": "docker-compose build",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down",
+    "tf:init": "cd infrastructure/terraform && terraform init",
+    "tf:plan": "cd infrastructure/terraform && terraform plan",
+    "tf:apply": "cd infrastructure/terraform && terraform apply",
+    "docs:serve": "cd docs && npm run serve"
+  },
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "concurrently": "^8.2.0",
+    "eslint": "^8.50.0",
+    "prettier": "^3.0.0",
+    "typescript": "^5.2.0"
+  },
+  "keywords": [
+    "AI",
+    "SaaS",
+    "customer-service",
+    "complaint-intelligence",
+    "multi-agent",
+    "orchestration",
+    "bedrock",
+    "rag",
+    "aws"
+  ]
+}
